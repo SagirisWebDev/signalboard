@@ -1,0 +1,17 @@
+# Dependencies (installed at build time)
+/vendor/
+/node_modules/
+
+# Build output
+/build/
+
+# Local / editor
+.DS_Store
+.env
+.env.*
+/.idea/
+/.vscode/
+/.claude/
+
+# Logs
+*.log
