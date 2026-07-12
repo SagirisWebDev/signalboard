@@ -20,6 +20,9 @@ use Sagiris\Signalboard\Moderation\ModerationScreen;
 use Sagiris\Signalboard\Rest\AuthController;
 use Sagiris\Signalboard\Rest\RequestsController;
 use Sagiris\Signalboard\Voting\VotesTable;
+use Sagiris\Signalboard\Webhook\CorsHeaders;
+use Sagiris\Signalboard\Webhook\SettingsPage;
+use Sagiris\Signalboard\Webhook\WebhookSubscriber;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -81,9 +84,21 @@ final class Plugin {
 		$board = new BoardBlock();
 		add_action( 'init', array( $board, 'register' ) );
 
+		// Fire signed webhooks when a request's status or publish state changes,
+		// and allow the configured headless origin through CORS on our routes.
+		$webhooks = new WebhookSubscriber();
+		add_action( 'init', array( $webhooks, 'register' ) );
+
+		$cors = new CorsHeaders();
+		add_action( 'rest_api_init', array( $cors, 'register' ) );
+
 		if ( is_admin() ) {
 			$moderation = new ModerationScreen();
 			add_action( 'admin_menu', array( $moderation, 'register' ) );
+
+			$webhook_settings = new SettingsPage();
+			add_action( 'admin_menu', array( $webhook_settings, 'register_page' ) );
+			add_action( 'admin_init', array( $webhook_settings, 'register_settings' ) );
 		}
 	}
 
