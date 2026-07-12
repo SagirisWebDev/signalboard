@@ -9,7 +9,9 @@ declare( strict_types=1 );
 
 namespace Sagiris\Signalboard\GraphQL;
 
+use Sagiris\Signalboard\Auth\AuthorizationPolicy;
 use Sagiris\Signalboard\Content\RequestPostType;
+use Sagiris\Signalboard\Domain\FeedbackRepository;
 use Sagiris\Signalboard\Voting\VoterFingerprint;
 use Sagiris\Signalboard\Voting\VoteService;
 
@@ -53,6 +55,144 @@ final class RequestsGraphQL {
 		);
 
 		$this->register_mutations();
+		$this->register_submission();
+	}
+
+	/**
+	 * Register the authenticated `submitRequest` mutation and `signalboardMySubmissions` query.
+	 *
+	 * Both delegate to the same {@see FeedbackRepository} and {@see AuthorizationPolicy}
+	 * the REST routes use, so submitting over GraphQL behaves identically to the
+	 * authenticated REST POST: the request is created in the pending state and the
+	 * caller must be authenticated (the current user is resolved from the bearer
+	 * token by {@see \Sagiris\Signalboard\Auth\TokenAuthenticator}).
+	 *
+	 * @return void
+	 */
+	private function register_submission(): void {
+		if ( ! function_exists( 'register_graphql_mutation' ) || ! function_exists( 'register_graphql_object_type' ) ) {
+			return;
+		}
+
+		$submission_fields = array(
+			'databaseId'       => array(
+				'type'        => 'Int',
+				'description' => __( 'Database ID of the request.', 'signalboard' ),
+			),
+			'title'            => array( 'type' => 'String' ),
+			'slug'             => array( 'type' => 'String' ),
+			'status'           => array(
+				'type'        => 'String',
+				'description' => __( 'Roadmap status slug, if assigned.', 'signalboard' ),
+			),
+			'moderationStatus' => array(
+				'type'        => 'String',
+				'description' => __( 'Publication state: pending while awaiting moderation, publish once live.', 'signalboard' ),
+			),
+			'voteCount'        => array( 'type' => 'Int' ),
+			'createdAt'        => array( 'type' => 'String' ),
+		);
+
+		register_graphql_object_type(
+			'SignalboardSubmission',
+			array(
+				'description' => __( 'A feedback request as seen by its own author, including moderation state.', 'signalboard' ),
+				'fields'      => $submission_fields,
+			)
+		);
+
+		register_graphql_mutation(
+			'submitRequest',
+			array(
+				'inputFields'         => array(
+					'title'   => array(
+						'type'        => array( 'non_null' => 'String' ),
+						'description' => __( 'Title of the feedback request.', 'signalboard' ),
+					),
+					'content' => array(
+						'type'        => 'String',
+						'description' => __( 'Body of the feedback request.', 'signalboard' ),
+					),
+					'board'   => array(
+						'type'        => 'String',
+						'description' => __( 'Board term slug to file the request under.', 'signalboard' ),
+					),
+				),
+				'outputFields'        => array(
+					'submission' => array(
+						'type'        => 'SignalboardSubmission',
+						'description' => __( 'The newly created, pending request.', 'signalboard' ),
+						'resolve'     => static function ( $payload ) {
+							return $payload['submission'] ?? null;
+						},
+					),
+				),
+				'mutateAndGetPayload' => static function ( $input ): array {
+					$user_id = get_current_user_id();
+
+					if ( ! ( new AuthorizationPolicy() )->can_submit( $user_id > 0 ? $user_id : null ) ) {
+						throw new \GraphQL\Error\UserError( esc_html__( 'You must be logged in to submit a request.', 'signalboard' ) );
+					}
+
+					$result = ( new FeedbackRepository() )->create(
+						array(
+							'title'     => (string) ( $input['title'] ?? '' ),
+							'content'   => (string) ( $input['content'] ?? '' ),
+							'board'     => (string) ( $input['board'] ?? '' ),
+							'author_id' => $user_id,
+						)
+					);
+
+					if ( is_wp_error( $result ) ) {
+						throw new \GraphQL\Error\UserError( esc_html( $result->get_error_message() ) );
+					}
+
+					return array( 'submission' => self::submission_shape( $result ) );
+				},
+			)
+		);
+
+		register_graphql_field(
+			'RootQuery',
+			'signalboardMySubmissions',
+			array(
+				'type'        => array( 'list_of' => 'SignalboardSubmission' ),
+				'description' => __( "The current user's own feedback requests, across moderation states.", 'signalboard' ),
+				'resolve'     => static function (): array {
+					$user_id = get_current_user_id();
+
+					if ( $user_id <= 0 ) {
+						return array();
+					}
+
+					$result = ( new FeedbackRepository() )->list_by_author( $user_id );
+
+					return array_map(
+						static fn( $request ) => self::submission_shape( $request ),
+						$result['items']
+					);
+				},
+			)
+		);
+	}
+
+	/**
+	 * Reduce a {@see \Sagiris\Signalboard\Domain\FeedbackRequest} to the
+	 * SignalboardSubmission field shape (keys matched by WPGraphQL's default resolver).
+	 *
+	 * @param \Sagiris\Signalboard\Domain\FeedbackRequest $request Source request.
+	 * @return array<string, mixed>
+	 */
+	private static function submission_shape( $request ): array {
+		return array(
+			'databaseId'       => $request->id,
+			'title'            => $request->title,
+			'slug'             => $request->slug,
+			'status'           => $request->status,
+			'moderationStatus' => $request->moderation_status,
+			'voteCount'        => $request->vote_count,
+			'createdAt'        => $request->created_at,
+		);
 	}
 
 	/**

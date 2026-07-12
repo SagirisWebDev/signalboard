@@ -3,7 +3,12 @@
  */
 import { registerBlockType } from '@wordpress/blocks';
 import { useBlockProps, InspectorControls } from '@wordpress/block-editor';
-import { PanelBody, TextControl, SelectControl } from '@wordpress/components';
+import {
+	PanelBody,
+	TextControl,
+	SelectControl,
+	ToggleControl,
+} from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import ServerSideRender from '@wordpress/server-side-render';
 import metadata from './block.json';
@@ -13,7 +18,7 @@ import './editor.scss';
 registerBlockType( metadata.name, {
 	edit( { attributes, setAttributes } ) {
 		const blockProps = useBlockProps();
-		const { board, defaultSort } = attributes;
+		const { board, defaultSort, allowSubmissions } = attributes;
 
 		return (
 			<div { ...blockProps }>
@@ -49,6 +54,17 @@ registerBlockType( metadata.name, {
 							] }
 							onChange={ ( value ) =>
 								setAttributes( { defaultSort: value } )
+							}
+						/>
+						<ToggleControl
+							label={ __( 'Allow submissions', 'signalboard' ) }
+							help={ __(
+								'Show a submission form on the board. Visitors must log in to submit; new requests enter a pending state for moderation.',
+								'signalboard'
+							) }
+							checked={ !! allowSubmissions }
+							onChange={ ( value ) =>
+								setAttributes( { allowSubmissions: value } )
 							}
 						/>
 					</PanelBody>

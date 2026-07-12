@@ -22,6 +22,10 @@
     "defaultSort": {
       "type": "string",
       "default": "date"
+    },
+    "allowSubmissions": {
+      "type": "boolean",
+      "default": false
     }
   },
   "supports": {

@@ -41,3 +41,17 @@ export function buildVoteUrl( restUrl, id ) {
 	const base = String( restUrl ).replace( /\/+$/, '' );
 	return `${ base }/${ id }/vote`;
 }
+
+/**
+ * Pure helper: derive the login endpoint URL from the requests base URL.
+ *
+ * The submission form reuses the auth slice's token flow; the board only knows
+ * the requests base URL, so the sibling `auth/login` route is derived from it.
+ *
+ * @param {string} restUrl Base REST URL for the requests collection.
+ * @return {string} The `signalboard/v1/auth/login` URL.
+ */
+export function buildLoginUrl( restUrl ) {
+	const base = String( restUrl ).replace( /\/+$/, '' );
+	return base.replace( /\/requests$/, '/auth/login' );
+}

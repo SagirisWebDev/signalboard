@@ -54,6 +54,8 @@ final class BoardRenderer {
 			$sort = 'date';
 		}
 
+		$allow_submissions = ! empty( $attributes['allowSubmissions'] );
+
 		$result = $this->repository->list(
 			array(
 				'board'    => $board,
@@ -100,6 +102,22 @@ final class BoardRenderer {
 			'hasPrev'    => false,
 			'hasNext'    => $total_pages > 1,
 		);
+
+		if ( $allow_submissions ) {
+			// Submission/auth state is resolved client-side from the stored token
+			// (see the view module's initAuth callback); seed neutral defaults.
+			$context += array(
+				'isAuthenticated' => false,
+				'submitting'      => false,
+				'submitted'       => false,
+				'authError'       => '',
+				'submitError'     => '',
+				'loginUsername'   => '',
+				'loginPassword'   => '',
+				'newTitle'        => '',
+				'newContent'      => '',
+			);
+		}
 
 		$context_attr = function_exists( 'wp_interactivity_data_wp_context' )
 			? wp_interactivity_data_wp_context( $context )
@@ -170,6 +188,47 @@ final class BoardRenderer {
 					<?php esc_html_e( 'Next', 'signalboard' ); ?>
 				</button>
 			</div>
+
+			<?php if ( $allow_submissions ) : ?>
+			<div class="signalboard-board__submit" data-wp-init="callbacks.initAuth">
+				<h3 class="signalboard-board__submit-heading"><?php esc_html_e( 'Submit a request', 'signalboard' ); ?></h3>
+
+				<form class="signalboard-board__login" data-wp-bind--hidden="context.isAuthenticated" data-wp-on--submit="actions.login">
+					<p class="signalboard-board__hint"><?php esc_html_e( 'Log in to submit a request.', 'signalboard' ); ?></p>
+					<p class="signalboard-board__error" data-wp-bind--hidden="!context.authError" data-wp-text="context.authError"></p>
+					<label>
+						<?php esc_html_e( 'Username or email', 'signalboard' ); ?>
+						<input type="text" autocomplete="username" data-sb-field="loginUsername" data-wp-on--input="actions.updateField" data-wp-bind--value="context.loginUsername" />
+					</label>
+					<label>
+						<?php esc_html_e( 'Password', 'signalboard' ); ?>
+						<input type="password" autocomplete="current-password" data-sb-field="loginPassword" data-wp-on--input="actions.updateField" data-wp-bind--value="context.loginPassword" />
+					</label>
+					<button type="submit" class="signalboard-board__login-submit"><?php esc_html_e( 'Log in', 'signalboard' ); ?></button>
+				</form>
+
+				<div class="signalboard-board__authed" data-wp-bind--hidden="!context.isAuthenticated">
+					<p class="signalboard-board__confirmation" data-wp-bind--hidden="!context.submitted">
+						<?php esc_html_e( 'Thanks! Your request has been submitted and is awaiting review.', 'signalboard' ); ?>
+					</p>
+					<form class="signalboard-board__form" data-wp-bind--hidden="context.submitted" data-wp-on--submit="actions.submit">
+						<p class="signalboard-board__error" data-wp-bind--hidden="!context.submitError" data-wp-text="context.submitError"></p>
+						<label>
+							<?php esc_html_e( 'Title', 'signalboard' ); ?>
+							<input type="text" required data-sb-field="newTitle" data-wp-on--input="actions.updateField" data-wp-bind--value="context.newTitle" />
+						</label>
+						<label>
+							<?php esc_html_e( 'Details', 'signalboard' ); ?>
+							<textarea data-sb-field="newContent" data-wp-on--input="actions.updateField" data-wp-bind--value="context.newContent"></textarea>
+						</label>
+						<div class="signalboard-board__form-actions">
+							<button type="submit" class="signalboard-board__form-submit" data-wp-bind--disabled="context.submitting"><?php esc_html_e( 'Submit request', 'signalboard' ); ?></button>
+							<button type="button" class="signalboard-board__logout" data-wp-on--click="actions.logout"><?php esc_html_e( 'Log out', 'signalboard' ); ?></button>
+						</div>
+					</form>
+				</div>
+			</div>
+			<?php endif; ?>
 		</div>
 		<?php
 		return (string) ob_get_clean();
