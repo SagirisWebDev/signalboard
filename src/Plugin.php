@@ -16,6 +16,7 @@ use Sagiris\Signalboard\Content\RequestPostType;
 use Sagiris\Signalboard\Domain\FeedbackRepository;
 use Sagiris\Signalboard\GraphQL\AuthGraphQL;
 use Sagiris\Signalboard\GraphQL\RequestsGraphQL;
+use Sagiris\Signalboard\Moderation\ModerationScreen;
 use Sagiris\Signalboard\Rest\AuthController;
 use Sagiris\Signalboard\Rest\RequestsController;
 use Sagiris\Signalboard\Voting\VotesTable;
@@ -79,6 +80,11 @@ final class Plugin {
 
 		$board = new BoardBlock();
 		add_action( 'init', array( $board, 'register' ) );
+
+		if ( is_admin() ) {
+			$moderation = new ModerationScreen();
+			add_action( 'admin_menu', array( $moderation, 'register' ) );
+		}
 	}
 
 	/**
