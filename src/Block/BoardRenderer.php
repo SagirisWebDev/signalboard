@@ -72,6 +72,7 @@ final class BoardRenderer {
 					'voteCount'   => $request->vote_count,
 					'status'      => $request->status,
 					'statusLabel' => $request->status_label,
+					'voted'       => false,
 				);
 			},
 			$result['items']
@@ -141,7 +142,15 @@ final class BoardRenderer {
 			<ul class="signalboard-board__list">
 				<template data-wp-each--item="context.items" data-wp-each-key="context.item.id">
 					<li class="signalboard-board__item">
-						<span class="signalboard-board__votes" data-wp-text="context.item.voteCount"></span>
+						<button
+							type="button"
+							class="signalboard-board__vote"
+							data-wp-on--click="actions.upvote"
+							data-wp-bind--aria-pressed="context.item.voted"
+						>
+							<span class="signalboard-board__votes" data-wp-text="context.item.voteCount"></span>
+							<span class="screen-reader-text"><?php esc_html_e( 'Upvote', 'signalboard' ); ?></span>
+						</button>
 						<span class="signalboard-board__title" data-wp-text="context.item.title"></span>
 						<span class="signalboard-board__status" data-wp-text="context.item.statusLabel"></span>
 					</li>

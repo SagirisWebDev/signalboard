@@ -10,6 +10,8 @@ declare( strict_types=1 );
 namespace Sagiris\Signalboard\GraphQL;
 
 use Sagiris\Signalboard\Content\RequestPostType;
+use Sagiris\Signalboard\Voting\VoterFingerprint;
+use Sagiris\Signalboard\Voting\VoteService;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -46,6 +48,85 @@ final class RequestsGraphQL {
 					$post_id = $source->databaseId ?? ( $source->ID ?? 0 ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase
 
 					return (int) get_post_meta( (int) $post_id, RequestPostType::META_VOTE_COUNT, true );
+				},
+			)
+		);
+
+		$this->register_mutations();
+	}
+
+	/**
+	 * Register the anonymous upvote / retract mutations.
+	 *
+	 * Both delegate to the same {@see VoteService} the REST routes use, so the
+	 * two APIs cannot diverge. The voter fingerprint is derived from the current
+	 * HTTP request's superglobals, mirroring the REST path.
+	 *
+	 * @return void
+	 */
+	private function register_mutations(): void {
+		if ( ! function_exists( 'register_graphql_mutation' ) ) {
+			return;
+		}
+
+		$input_fields = array(
+			'id' => array(
+				'type'        => array( 'non_null' => 'Int' ),
+				'description' => __( 'Database ID of the request to vote on.', 'signalboard' ),
+			),
+		);
+
+		$output_fields = array(
+			'voteCount' => array(
+				'type'        => 'Int',
+				'description' => __( 'Updated vote count for the request.', 'signalboard' ),
+				'resolve'     => static function ( $payload ): int {
+					return (int) ( $payload['voteCount'] ?? 0 );
+				},
+			),
+			'voted'     => array(
+				'type'        => 'Boolean',
+				'description' => __( 'Whether the caller now holds a vote on the request.', 'signalboard' ),
+				'resolve'     => static function ( $payload ): bool {
+					return (bool) ( $payload['voted'] ?? false );
+				},
+			),
+		);
+
+		register_graphql_mutation(
+			'upvoteRequest',
+			array(
+				'inputFields'         => $input_fields,
+				'outputFields'        => $output_fields,
+				'mutateAndGetPayload' => static function ( $input ): array {
+					$result = ( new VoteService() )->cast_vote(
+						(int) $input['id'],
+						VoterFingerprint::fromServer( $_SERVER, $_COOKIE ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- Sanitized within fromServer().
+					);
+
+					return array(
+						'voteCount' => $result['count'],
+						'voted'     => true,
+					);
+				},
+			)
+		);
+
+		register_graphql_mutation(
+			'retractUpvote',
+			array(
+				'inputFields'         => $input_fields,
+				'outputFields'        => $output_fields,
+				'mutateAndGetPayload' => static function ( $input ): array {
+					$result = ( new VoteService() )->retract_vote(
+						(int) $input['id'],
+						VoterFingerprint::fromServer( $_SERVER, $_COOKIE ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- Sanitized within fromServer().
+					);
+
+					return array(
+						'voteCount' => $result['count'],
+						'voted'     => false,
+					);
 				},
 			)
 		);

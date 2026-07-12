@@ -9,7 +9,11 @@ declare( strict_types=1 );
 
 namespace Sagiris\Signalboard\Rest;
 
+use Sagiris\Signalboard\Auth\AuthorizationPolicy;
 use Sagiris\Signalboard\Domain\FeedbackRepository;
+use Sagiris\Signalboard\Voting\RateLimiter;
+use Sagiris\Signalboard\Voting\VoterFingerprint;
+use Sagiris\Signalboard\Voting\VoteService;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -18,12 +22,22 @@ use WP_REST_Server;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Exposes read routes for feedback requests under the signalboard/v1 namespace.
+ * Exposes read and voting routes for feedback requests under signalboard/v1.
  */
 final class RequestsController {
 
 	private const NAMESPACE = 'signalboard/v1';
 	private const REST_BASE = 'requests';
+
+	/**
+	 * Default votes permitted per client IP within the rate-limit window.
+	 */
+	private const VOTE_LIMIT = 20;
+
+	/**
+	 * Default rate-limit window, in seconds.
+	 */
+	private const VOTE_WINDOW = 60;
 
 	/**
 	 * Read model.
@@ -33,12 +47,44 @@ final class RequestsController {
 	private FeedbackRepository $repository;
 
 	/**
+	 * Vote write/read service.
+	 *
+	 * @var VoteService
+	 */
+	private VoteService $votes;
+
+	/**
+	 * Per-IP rate limiter guarding the vote route.
+	 *
+	 * @var RateLimiter
+	 */
+	private RateLimiter $rate_limiter;
+
+	/**
+	 * Authorization policy.
+	 *
+	 * @var AuthorizationPolicy
+	 */
+	private AuthorizationPolicy $policy;
+
+	/**
 	 * Constructor.
 	 *
-	 * @param FeedbackRepository $repository Read model.
+	 * @param FeedbackRepository       $repository   Read model.
+	 * @param VoteService|null         $votes        Vote service (defaults to a new instance).
+	 * @param RateLimiter|null         $rate_limiter Vote rate limiter (defaults to per-IP 20/min).
+	 * @param AuthorizationPolicy|null $policy       Authorization policy (defaults to a new instance).
 	 */
-	public function __construct( FeedbackRepository $repository ) {
-		$this->repository = $repository;
+	public function __construct(
+		FeedbackRepository $repository,
+		?VoteService $votes = null,
+		?RateLimiter $rate_limiter = null,
+		?AuthorizationPolicy $policy = null
+	) {
+		$this->repository   = $repository;
+		$this->votes        = $votes ?? new VoteService();
+		$this->rate_limiter = $rate_limiter ?? new RateLimiter( self::VOTE_LIMIT, self::VOTE_WINDOW, 'signalboard_vote' );
+		$this->policy       = $policy ?? new AuthorizationPolicy();
 	}
 
 	/**
@@ -69,15 +115,143 @@ final class RequestsController {
 					'callback'            => array( $this, 'get_item' ),
 					'permission_callback' => '__return_true',
 					'args'                => array(
-						'id' => array(
-							'description'       => __( 'Unique identifier for the request.', 'signalboard' ),
-							'type'              => 'integer',
-							'required'          => true,
-							'sanitize_callback' => 'absint',
-						),
+						'id' => $this->id_arg(),
 					),
 				),
 			)
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/' . self::REST_BASE . '/(?P<id>\d+)/vote',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'create_vote' ),
+					'permission_callback' => array( $this, 'vote_permissions_check' ),
+					'args'                => array(
+						'id' => $this->id_arg(),
+					),
+				),
+				array(
+					'methods'             => WP_REST_Server::DELETABLE,
+					'callback'            => array( $this, 'delete_vote' ),
+					'permission_callback' => array( $this, 'vote_permissions_check' ),
+					'args'                => array(
+						'id' => $this->id_arg(),
+					),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Permission check for the vote routes.
+	 *
+	 * @return bool
+	 */
+	public function vote_permissions_check(): bool {
+		$user_id = get_current_user_id();
+
+		return $this->policy->can_upvote( $user_id > 0 ? $user_id : null );
+	}
+
+	/**
+	 * Cast a vote for a request.
+	 *
+	 * @param WP_REST_Request $request Incoming request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function create_vote( WP_REST_Request $request ) {
+		$id = (int) $request->get_param( 'id' );
+
+		if ( null === $this->repository->get( $id ) ) {
+			return $this->not_found();
+		}
+
+		$fingerprint = VoterFingerprint::fromRequest( $request );
+
+		if ( ! $this->rate_limiter->allow( 'ip_' . $this->client_ip() ) ) {
+			return new WP_Error(
+				'signalboard_rate_limited',
+				__( 'Too many votes in a short time. Please slow down.', 'signalboard' ),
+				array( 'status' => 429 )
+			);
+		}
+
+		$result = $this->votes->cast_vote( $id, $fingerprint );
+
+		return new WP_REST_Response(
+			array(
+				'id'        => $id,
+				'voteCount' => $result['count'],
+				'voted'     => true,
+			)
+		);
+	}
+
+	/**
+	 * Retract a vote for a request.
+	 *
+	 * @param WP_REST_Request $request Incoming request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function delete_vote( WP_REST_Request $request ) {
+		$id = (int) $request->get_param( 'id' );
+
+		if ( null === $this->repository->get( $id ) ) {
+			return $this->not_found();
+		}
+
+		$fingerprint = VoterFingerprint::fromRequest( $request );
+		$result      = $this->votes->retract_vote( $id, $fingerprint );
+
+		return new WP_REST_Response(
+			array(
+				'id'        => $id,
+				'voteCount' => $result['count'],
+				'voted'     => false,
+			)
+		);
+	}
+
+	/**
+	 * Shared "request not found" error.
+	 *
+	 * @return WP_Error
+	 */
+	private function not_found(): WP_Error {
+		return new WP_Error(
+			'signalboard_request_not_found',
+			__( 'Feedback request not found.', 'signalboard' ),
+			array( 'status' => 404 )
+		);
+	}
+
+	/**
+	 * Best-effort client IP for the rate-limit bucket.
+	 *
+	 * @return string
+	 */
+	private function client_ip(): string {
+		if ( ! isset( $_SERVER['REMOTE_ADDR'] ) ) {
+			return '';
+		}
+
+		return sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) );
+	}
+
+	/**
+	 * Shared argument schema for the `id` path parameter.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private function id_arg(): array {
+		return array(
+			'description'       => __( 'Unique identifier for the request.', 'signalboard' ),
+			'type'              => 'integer',
+			'required'          => true,
+			'sanitize_callback' => 'absint',
 		);
 	}
 
