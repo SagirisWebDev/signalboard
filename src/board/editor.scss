@@ -1,0 +1,6 @@
+.wp-block-signalboard-board {
+	// The editor preview is server-rendered; give it a little breathing room.
+	.signalboard-board__controls select {
+		pointer-events: none;
+	}
+}

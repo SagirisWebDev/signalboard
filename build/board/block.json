@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "signalboard/board",
+  "version": "0.1.0",
+  "title": "Signalboard Board",
+  "category": "widgets",
+  "icon": "megaphone",
+  "description": "Display the feedback & roadmap board, with live filter, sort and pagination.",
+  "keywords": [
+    "feedback",
+    "roadmap",
+    "voting",
+    "signalboard"
+  ],
+  "textdomain": "signalboard",
+  "attributes": {
+    "board": {
+      "type": "string",
+      "default": ""
+    },
+    "defaultSort": {
+      "type": "string",
+      "default": "date"
+    }
+  },
+  "supports": {
+    "html": false,
+    "interactivity": true,
+    "align": [
+      "wide",
+      "full"
+    ]
+  },
+  "editorScript": "file:./index.js",
+  "editorStyle": "file:./index.css",
+  "style": "file:./style-index.css",
+  "viewScriptModule": "file:./view.js",
+  "render": "file:./render.php"
+}

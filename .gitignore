@@ -2,8 +2,8 @@
 /vendor/
 /node_modules/
 
-# Build output
-/build/
+# Note: /build/ (compiled block assets) IS committed so the plugin works on a
+# fresh clone / on wp.org without a Node build step.
 
 # Local / editor
 .DS_Store
@@ -21,3 +21,6 @@
 
 # Test artifacts
 /.phpunit.result.cache
+/test-results/
+/playwright-report/
+/.last-run.json

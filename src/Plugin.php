@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace Sagiris\Signalboard;
 
+use Sagiris\Signalboard\Block\BoardBlock;
 use Sagiris\Signalboard\Content\RequestPostType;
 use Sagiris\Signalboard\Domain\FeedbackRepository;
 use Sagiris\Signalboard\GraphQL\RequestsGraphQL;
@@ -56,6 +57,9 @@ final class Plugin {
 
 		$graphql = new RequestsGraphQL();
 		add_action( 'graphql_register_types', array( $graphql, 'register' ) );
+
+		$board = new BoardBlock();
+		add_action( 'init', array( $board, 'register' ) );
 	}
 
 	/**
