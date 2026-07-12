@@ -33,6 +33,10 @@ final class FeedbackRequest {
 	 * @param int         $vote_count  Cached upvote count.
 	 * @param string      $created_at  ISO-8601 (UTC) creation timestamp.
 	 * @param string      $author_name Author display name.
+	 * @param string      $moderation_status Publication state ('publish' when live on the
+	 *                                       public board, 'pending' while awaiting moderation).
+	 *                                       Defaults to 'publish' so every read path that only
+	 *                                       ever surfaces live requests keeps its existing shape.
 	 */
 	public function __construct(
 		public readonly int $id,
@@ -45,7 +49,8 @@ final class FeedbackRequest {
 		public readonly ?string $board_label,
 		public readonly int $vote_count,
 		public readonly string $created_at,
-		public readonly string $author_name
+		public readonly string $author_name,
+		public readonly string $moderation_status = 'publish'
 	) {}
 
 	/**
@@ -55,17 +60,18 @@ final class FeedbackRequest {
 	 */
 	public function to_array(): array {
 		return array(
-			'id'          => $this->id,
-			'title'       => $this->title,
-			'slug'        => $this->slug,
-			'content'     => $this->content,
-			'status'      => $this->status,
-			'statusLabel' => $this->status_label,
-			'board'       => $this->board,
-			'boardLabel'  => $this->board_label,
-			'voteCount'   => $this->vote_count,
-			'createdAt'   => $this->created_at,
-			'authorName'  => $this->author_name,
+			'id'               => $this->id,
+			'title'            => $this->title,
+			'slug'             => $this->slug,
+			'content'          => $this->content,
+			'status'           => $this->status,
+			'statusLabel'      => $this->status_label,
+			'board'            => $this->board,
+			'boardLabel'       => $this->board_label,
+			'voteCount'        => $this->vote_count,
+			'createdAt'        => $this->created_at,
+			'authorName'       => $this->author_name,
+			'moderationStatus' => $this->moderation_status,
 		);
 	}
 }

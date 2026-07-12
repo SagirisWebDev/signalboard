@@ -32,4 +32,17 @@ final class AuthorizationPolicy {
 
 		return true;
 	}
+
+	/**
+	 * Whether the current actor may submit a new feedback request.
+	 *
+	 * Submission requires an authenticated user — anonymous visitors are
+	 * rejected here so the REST route and the GraphQL mutation enforce one rule.
+	 *
+	 * @param int|null $user_id Optional user ID (null = anonymous visitor).
+	 * @return bool
+	 */
+	public function can_submit( ?int $user_id = null ): bool {
+		return null !== $user_id && $user_id > 0;
+	}
 }

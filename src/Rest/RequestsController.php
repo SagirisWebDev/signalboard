@@ -103,6 +103,25 @@ final class RequestsController {
 					'permission_callback' => '__return_true',
 					'args'                => $this->collection_args(),
 				),
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'create_item' ),
+					'permission_callback' => array( $this, 'submit_permissions_check' ),
+					'args'                => $this->submission_args(),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/' . self::REST_BASE . '/mine',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_my_items' ),
+					'permission_callback' => array( $this, 'submit_permissions_check' ),
+					'args'                => $this->mine_args(),
+				),
 			)
 		);
 
@@ -154,6 +173,71 @@ final class RequestsController {
 		$user_id = get_current_user_id();
 
 		return $this->policy->can_upvote( $user_id > 0 ? $user_id : null );
+	}
+
+	/**
+	 * Permission check for the authenticated submission routes.
+	 *
+	 * Delegates to the shared policy so REST and GraphQL enforce the same rule:
+	 * a real, logged-in user is required. Anonymous callers fail here and core
+	 * returns 401.
+	 *
+	 * @return bool
+	 */
+	public function submit_permissions_check(): bool {
+		$user_id = get_current_user_id();
+
+		return $this->policy->can_submit( $user_id > 0 ? $user_id : null );
+	}
+
+	/**
+	 * Create a feedback request in the pending (moderation) state.
+	 *
+	 * @param WP_REST_Request $request Incoming request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function create_item( WP_REST_Request $request ) {
+		$result = $this->repository->create(
+			array(
+				'title'     => $request->get_param( 'title' ),
+				'content'   => $request->get_param( 'content' ),
+				'board'     => $request->get_param( 'board' ),
+				'author_id' => get_current_user_id(),
+			)
+		);
+
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		return new WP_REST_Response( $result->to_array(), 201 );
+	}
+
+	/**
+	 * List the current user's own submissions, across moderation states.
+	 *
+	 * @param WP_REST_Request $request Incoming request.
+	 * @return WP_REST_Response
+	 */
+	public function get_my_items( WP_REST_Request $request ): WP_REST_Response {
+		$result = $this->repository->list_by_author(
+			get_current_user_id(),
+			array(
+				'page'     => $request->get_param( 'page' ),
+				'per_page' => $request->get_param( 'per_page' ),
+			)
+		);
+
+		$data = array_map(
+			static fn( $item ) => $item->to_array(),
+			$result['items']
+		);
+
+		$response = new WP_REST_Response( $data );
+		$response->header( 'X-WP-Total', (string) $result['total'] );
+		$response->header( 'X-WP-TotalPages', (string) $result['total_pages'] );
+
+		return $response;
 	}
 
 	/**
@@ -304,6 +388,61 @@ final class RequestsController {
 		}
 
 		return new WP_REST_Response( $item->to_array() );
+	}
+
+	/**
+	 * Argument schema for the authenticated submission (POST) route.
+	 *
+	 * @return array<string, array<string, mixed>>
+	 */
+	private function submission_args(): array {
+		return array(
+			'title'   => array(
+				'description'       => __( 'Title of the feedback request.', 'signalboard' ),
+				'type'              => 'string',
+				'required'          => true,
+				'minLength'         => 1,
+				'sanitize_callback' => 'sanitize_text_field',
+				'validate_callback' => static function ( $value ): bool {
+					return is_string( $value ) && '' !== trim( $value );
+				},
+			),
+			'content' => array(
+				'description'       => __( 'Body of the feedback request.', 'signalboard' ),
+				'type'              => 'string',
+				'sanitize_callback' => 'wp_kses_post',
+			),
+			'board'   => array(
+				'description'       => __( 'Board term slug to file the request under.', 'signalboard' ),
+				'type'              => 'string',
+				'sanitize_callback' => 'sanitize_title',
+			),
+		);
+	}
+
+	/**
+	 * Argument schema for the "my submissions" route.
+	 *
+	 * @return array<string, array<string, mixed>>
+	 */
+	private function mine_args(): array {
+		return array(
+			'page'     => array(
+				'description'       => __( 'Current page of the collection.', 'signalboard' ),
+				'type'              => 'integer',
+				'default'           => 1,
+				'minimum'           => 1,
+				'sanitize_callback' => 'absint',
+			),
+			'per_page' => array(
+				'description'       => __( 'Maximum number of items per page.', 'signalboard' ),
+				'type'              => 'integer',
+				'default'           => 10,
+				'minimum'           => 1,
+				'maximum'           => 100,
+				'sanitize_callback' => 'absint',
+			),
+		);
 	}
 
 	/**

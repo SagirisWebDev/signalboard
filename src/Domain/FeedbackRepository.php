@@ -10,6 +10,7 @@ declare( strict_types=1 );
 namespace Sagiris\Signalboard\Domain;
 
 use Sagiris\Signalboard\Content\RequestPostType;
+use WP_Error;
 use WP_Post;
 use WP_Query;
 
@@ -67,6 +68,121 @@ final class FeedbackRepository {
 			array( $this, 'map_post' ),
 			$query->posts
 		);
+
+		return array(
+			'items'       => $items,
+			'total'       => (int) $query->found_posts,
+			'total_pages' => (int) $query->max_num_pages,
+		);
+	}
+
+	/**
+	 * Create a feedback request in the pending (moderation) state.
+	 *
+	 * The single write path beneath the authenticated REST route and the
+	 * `submitRequest` GraphQL mutation, so both surfaces persist identical
+	 * records. The new request enters `pending` status — it does not appear on
+	 * the public board until a moderator approves it (a later slice).
+	 *
+	 * Authorization is the caller's responsibility (see
+	 * {@see \Sagiris\Signalboard\Auth\AuthorizationPolicy::can_submit()}); this
+	 * method only validates the domain input and requires a real author.
+	 *
+	 * Recognised input keys:
+	 *  - title     (string) required, non-empty after trimming.
+	 *  - content   (string) optional request body.
+	 *  - board     (string) optional board term slug (assigned only if it exists).
+	 *  - author_id (int)    the submitting user's ID.
+	 *
+	 * @param array<string, mixed> $input Submission fields.
+	 * @return FeedbackRequest|WP_Error The created request, or an error on invalid input.
+	 */
+	public function create( array $input ): FeedbackRequest|WP_Error {
+		$title     = sanitize_text_field( (string) ( $input['title'] ?? '' ) );
+		$author_id = (int) ( $input['author_id'] ?? 0 );
+
+		if ( '' === trim( $title ) ) {
+			return new WP_Error(
+				'signalboard_invalid_submission',
+				__( 'A title is required.', 'signalboard' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		if ( $author_id <= 0 ) {
+			return new WP_Error(
+				'signalboard_invalid_submission',
+				__( 'A submission requires an authenticated author.', 'signalboard' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$post_id = wp_insert_post(
+			array(
+				'post_type'    => RequestPostType::POST_TYPE,
+				'post_status'  => 'pending',
+				'post_title'   => $title,
+				'post_content' => wp_kses_post( (string) ( $input['content'] ?? '' ) ),
+				'post_author'  => $author_id,
+			),
+			true
+		);
+
+		if ( is_wp_error( $post_id ) ) {
+			return new WP_Error(
+				'signalboard_submission_failed',
+				$post_id->get_error_message(),
+				array( 'status' => 500 )
+			);
+		}
+
+		if ( ! empty( $input['board'] ) ) {
+			$board = sanitize_title( (string) $input['board'] );
+			if ( '' !== $board && term_exists( $board, RequestPostType::TAX_BOARD ) ) {
+				wp_set_object_terms( (int) $post_id, $board, RequestPostType::TAX_BOARD );
+			}
+		}
+
+		return $this->map_post( get_post( (int) $post_id ) );
+	}
+
+	/**
+	 * List the requests submitted by a given author, across moderation states.
+	 *
+	 * Unlike {@see list()} — which is scoped to the public, published board —
+	 * this returns the author's own pending, published and rejected (draft)
+	 * requests so they can track what they submitted and its current status.
+	 *
+	 * @param int                  $author_id Author user ID.
+	 * @param array<string, mixed> $filters   Optional paging: page, per_page.
+	 * @return array{items: FeedbackRequest[], total: int, total_pages: int}
+	 */
+	public function list_by_author( int $author_id, array $filters = array() ): array {
+		if ( $author_id <= 0 ) {
+			return array(
+				'items'       => array(),
+				'total'       => 0,
+				'total_pages' => 0,
+			);
+		}
+
+		$page     = max( 1, (int) ( $filters['page'] ?? 1 ) );
+		$per_page = max( 1, min( 100, (int) ( $filters['per_page'] ?? 10 ) ) );
+
+		$query = new WP_Query(
+			array(
+				'post_type'      => RequestPostType::POST_TYPE,
+				'author'         => $author_id,
+				'post_status'    => array( 'pending', 'publish', 'draft' ),
+				'posts_per_page' => $per_page,
+				'paged'          => $page,
+				'orderby'        => 'date',
+				'order'          => 'DESC',
+				'no_found_rows'  => false,
+			)
+		);
+
+		$items = array_map( array( $this, 'map_post' ), $query->posts );
 
 		return array(
 			'items'       => $items,
@@ -188,7 +304,8 @@ final class FeedbackRepository {
 			board_label: $board['name'],
 			vote_count: (int) get_post_meta( $post->ID, RequestPostType::META_VOTE_COUNT, true ),
 			created_at: (string) get_post_time( 'c', true, $post ),
-			author_name: (string) get_the_author_meta( 'display_name', (int) $post->post_author )
+			author_name: (string) get_the_author_meta( 'display_name', (int) $post->post_author ),
+			moderation_status: $post->post_status
 		);
 	}
 

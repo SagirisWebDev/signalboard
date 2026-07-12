@@ -242,4 +242,142 @@ final class FeedbackRepositoryTest extends WP_UnitTestCase {
 
 		$this->assertNull( $this->repository->get( $page ) );
 	}
+
+	public function test_create_enters_pending_status(): void {
+		$author = self::factory()->user->create();
+
+		$request = $this->repository->create(
+			array(
+				'title'     => 'Dark mode please',
+				'content'   => 'Would love a dark theme.',
+				'author_id' => $author,
+			)
+		);
+
+		$this->assertInstanceOf( FeedbackRequest::class, $request );
+		$this->assertSame( 'pending', $request->moderation_status );
+		$this->assertSame( 'Dark mode please', $request->title );
+		$this->assertSame( 'pending', get_post_status( $request->id ) );
+	}
+
+	public function test_created_request_is_absent_from_the_public_list(): void {
+		$author = self::factory()->user->create();
+
+		$this->repository->create(
+			array(
+				'title'     => 'Hidden until approved',
+				'author_id' => $author,
+			)
+		);
+
+		$result = $this->repository->list();
+
+		$this->assertSame( 0, $result['total'] );
+		$this->assertCount( 0, $result['items'] );
+	}
+
+	public function test_create_assigns_the_submitting_author(): void {
+		$author = self::factory()->user->create();
+
+		$request = $this->repository->create(
+			array(
+				'title'     => 'Mine',
+				'author_id' => $author,
+			)
+		);
+
+		$this->assertSame( $author, (int) get_post( $request->id )->post_author );
+	}
+
+	public function test_create_rejects_a_blank_title(): void {
+		$author = self::factory()->user->create();
+
+		$result = $this->repository->create(
+			array(
+				'title'     => '   ',
+				'author_id' => $author,
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'signalboard_invalid_submission', $result->get_error_code() );
+	}
+
+	public function test_create_rejects_a_missing_author(): void {
+		$result = $this->repository->create( array( 'title' => 'Orphan' ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'signalboard_invalid_submission', $result->get_error_code() );
+	}
+
+	public function test_create_files_under_an_existing_board_term(): void {
+		$author = self::factory()->user->create();
+		$this->ensure_term( 'core', RequestPostType::TAX_BOARD );
+
+		$request = $this->repository->create(
+			array(
+				'title'     => 'Boarded',
+				'board'     => 'core',
+				'author_id' => $author,
+			)
+		);
+
+		$this->assertSame( 'core', $request->board );
+	}
+
+	public function test_list_by_author_returns_own_requests_across_states(): void {
+		$author = self::factory()->user->create();
+
+		$pending   = $this->repository->create(
+			array(
+				'title'     => 'Pending one',
+				'author_id' => $author,
+			)
+		);
+		$published = self::factory()->post->create(
+			array(
+				'post_type'   => RequestPostType::POST_TYPE,
+				'post_status' => 'publish',
+				'post_title'  => 'Published one',
+				'post_author' => $author,
+			)
+		);
+
+		$result = $this->repository->list_by_author( $author );
+
+		$ids = array_map( static fn( $i ) => $i->id, $result['items'] );
+		$this->assertSame( 2, $result['total'] );
+		$this->assertContains( $pending->id, $ids );
+		$this->assertContains( $published, $ids );
+	}
+
+	public function test_list_by_author_excludes_other_authors(): void {
+		$mine   = self::factory()->user->create();
+		$theirs = self::factory()->user->create();
+
+		$this->repository->create(
+			array(
+				'title'     => 'Theirs',
+				'author_id' => $theirs,
+			)
+		);
+		$my_request = $this->repository->create(
+			array(
+				'title'     => 'Mine',
+				'author_id' => $mine,
+			)
+		);
+
+		$result = $this->repository->list_by_author( $mine );
+
+		$this->assertSame( 1, $result['total'] );
+		$this->assertSame( $my_request->id, $result['items'][0]->id );
+	}
+
+	public function test_list_by_author_is_empty_for_anonymous(): void {
+		$result = $this->repository->list_by_author( 0 );
+
+		$this->assertSame( 0, $result['total'] );
+		$this->assertCount( 0, $result['items'] );
+	}
 }

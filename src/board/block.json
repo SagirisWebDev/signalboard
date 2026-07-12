@@ -11,7 +11,8 @@
 	"textdomain": "signalboard",
 	"attributes": {
 		"board": { "type": "string", "default": "" },
-		"defaultSort": { "type": "string", "default": "date" }
+		"defaultSort": { "type": "string", "default": "date" },
+		"allowSubmissions": { "type": "boolean", "default": false }
 	},
 	"supports": {
 		"html": false,
