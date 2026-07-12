@@ -13,5 +13,11 @@
 /.vscode/
 /.claude/
 
+# Local-only harness config (not shipped with the repo)
+/.swd-harness/
+
 # Logs
 *.log
+
+# Test artifacts
+/.phpunit.result.cache
