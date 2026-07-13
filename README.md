@@ -36,4 +36,8 @@ The built-in flow keeps this plugin dependency-free and is ideal for demos and s
 
 ## Documentation
 
-Architecture notes, data-flow diagram, and engineering-decision rationale will live in `docs/` as the build progresses.
+- **[Architecture](docs/ARCHITECTURE.md)** — the layered overview, a Mermaid data-flow diagram, and the "why I built it this way" engineering-decision rationale.
+- **[`readme.txt`](readme.txt)** — the wp.org-format plugin readme (description, FAQ, screenshots, changelog).
+- **[`examples/nextjs/`](examples/nextjs/)** — a reference Next.js revalidation route that verifies the HMAC-signed webhook.
+
+The public board and status-grouped roadmap are consumed by a headless **Next.js** demo over the **WPGraphQL** layer; every surface reads through the same model exposed over the **REST API** and WPGraphQL.
