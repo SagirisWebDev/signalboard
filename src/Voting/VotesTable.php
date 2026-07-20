@@ -37,6 +37,23 @@ final class VotesTable {
 	}
 
 	/**
+	 * Whether the table actually exists in the database.
+	 *
+	 * Used to self-heal sites where the version option was recorded but the
+	 * dbDelta call it guarded never actually persisted (observed once via a
+	 * WP-CLI-driven activation).
+	 *
+	 * @return bool
+	 */
+	public static function exists(): bool {
+		global $wpdb;
+
+		$table = self::table_name();
+
+		return $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) === $table;
+	}
+
+	/**
 	 * Create or upgrade the votes table via dbDelta.
 	 *
 	 * @return void
