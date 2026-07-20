@@ -155,7 +155,9 @@ final class Plugin {
 	 * @return void
 	 */
 	public function maybe_upgrade_database(): void {
-		if ( get_option( self::DB_VERSION_OPTION ) === VotesTable::VERSION ) {
+		$up_to_date = get_option( self::DB_VERSION_OPTION ) === VotesTable::VERSION;
+
+		if ( $up_to_date && VotesTable::exists() ) {
 			return;
 		}
 
