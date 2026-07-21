@@ -15,7 +15,19 @@ import metadata from './block.json';
 import './style.scss';
 import './editor.scss';
 
+// Signal-bars mark: matches the mark used for the admin menu icon, in its
+// two-tone form (the accent bar picks out "the signal" among the four).
+const icon = (
+	<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+		<rect x="1" y="10" width="4" height="10" rx="1.5" fill="#1A1A2E" />
+		<rect x="7" y="2" width="4" height="18" rx="1.5" fill="#B5A642" />
+		<rect x="13" y="14" width="4" height="6" rx="1.5" fill="#1A1A2E" />
+		<rect x="19" y="6" width="4" height="14" rx="1.5" fill="#1A1A2E" />
+	</svg>
+);
+
 registerBlockType( metadata.name, {
+	icon,
 	edit( { attributes, setAttributes } ) {
 		const blockProps = useBlockProps();
 		const { board, defaultSort, allowSubmissions } = attributes;
