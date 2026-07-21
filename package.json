@@ -11,7 +11,8 @@
     "test": "wp-scripts test-unit-js",
     "test:unit": "wp-scripts test-unit-js",
     "test:browser": "playwright test",
-    "test:browser:headed": "playwright test --headed"
+    "test:browser:headed": "playwright test --headed",
+    "plugin-zip": "bash $HOME/.local/bin/sagiris-plugin-zip"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

@@ -1,0 +1,70 @@
+# .distignore — paths excluded from the customer-facing zip.
+# Used by `npm run plugin-zip` (sagiris-plugin-zip) to produce a clean release.
+#
+# NOTE: unlike sibling Sagiris block plugins, this plugin's PHP application
+# lives entirely in /src (PSR-4 classes) and requires /vendor at runtime
+# (firebase/php-jwt for auth) — both are intentionally NOT excluded here,
+# unlike the generic fallback this script uses when no .distignore is present.
+
+# Tests + test infrastructure + packaging scripts
+/tests
+/bin
+/phpunit.xml.dist
+/phpunit.xml
+.phpunit.result.cache
+/playwright.config.js
+/test-results
+/playwright-report
+/.last-run.json
+
+# Reference/example code — not part of the installable plugin
+/examples
+
+# Pre-build block source — the block always registers from /build
+# (register_block_type() points at build/board, and the build step copies
+# block.json + render.php there verbatim), so /src/board is fully redundant
+# at runtime, unlike the rest of /src (PSR-4 PHP classes, which do ship).
+/src/board
+
+# Dev tooling configs (no runtime value)
+/phpcs.xml.dist
+/.wp-env.json
+
+# Internal docs (ADRs, architecture notes) and agent context files
+/docs
+CLAUDE.md
+CONTEXT.md
+/.swd-harness
+/.claude
+
+# wp.org listing-only assets (icon/banner) — not loaded at runtime, so they
+# don't belong inside every customer's installed plugin folder
+/assets
+*.png
+*.jpg
+*.jpeg
+
+# Dev tooling manifests & lockfiles (not needed at runtime)
+/node_modules
+package.json
+package-lock.json
+composer.json
+composer.lock
+
+# Tooling state
+/.git
+/.github
+.gitignore
+.gitattributes
+.distignore
+.editorconfig
+
+# GitHub-facing doc (readme.txt is the wp.org-facing one and IS shipped)
+README.md
+
+# Build & release zip artefacts (must not appear inside the release zip itself)
+*.zip
+
+# OS junk
+.DS_Store
+Thumbs.db

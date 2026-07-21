@@ -40,6 +40,27 @@ final class RequestPostType {
 	}
 
 	/**
+	 * Admin menu icon: the signal-bars mark as a base64 SVG data URI.
+	 *
+	 * Filled black per WordPress's own convention for custom menu icons — the
+	 * admin CSS masks/recolors this via opacity to match the active color
+	 * scheme, the same treatment applied to dashicons.
+	 *
+	 * @return string
+	 */
+	private static function menu_icon(): string {
+		$svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+			. '<rect x="1" y="10" width="4" height="10" rx="1.5" fill="black"/>'
+			. '<rect x="7" y="2" width="4" height="18" rx="1.5" fill="black"/>'
+			. '<rect x="13" y="14" width="4" height="6" rx="1.5" fill="black"/>'
+			. '<rect x="19" y="6" width="4" height="14" rx="1.5" fill="black"/>'
+			. '</svg>';
+
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- encoding an inline SVG as a data URI, WordPress core's own documented pattern for custom menu_icon values, not obfuscation.
+		return 'data:image/svg+xml;base64,' . base64_encode( $svg );
+	}
+
+	/**
 	 * Register the post type, taxonomies, and meta.
 	 *
 	 * @return void
@@ -69,7 +90,7 @@ final class RequestPostType {
 				),
 				'public'              => true,
 				'show_in_rest'        => true,
-				'menu_icon'           => 'dashicons-megaphone',
+				'menu_icon'           => self::menu_icon(),
 				'supports'            => array( 'title', 'editor', 'author', 'custom-fields' ),
 				'has_archive'         => false,
 				'rewrite'             => array( 'slug' => 'signalboard' ),
